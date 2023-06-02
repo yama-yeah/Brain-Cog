@@ -38,24 +38,27 @@ class BaseNode(nn.Module, abc.ABC):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self,
-                 threshold=.5,
-                 v_reset=0.,
-                 dt=1.,
-                 step=8,
-                 requires_thres_grad=False,
-                 sigmoid_thres=False,
-                 requires_fp=False,
-                 layer_by_layer=False,
-                 n_groups=1,
-                 *args,
-                 **kwargs):
-
+    def __init__(
+        self,
+        threshold=0.5,
+        v_reset=0.0,
+        dt=1.0,
+        step=8,
+        requires_thres_grad=False,
+        sigmoid_thres=False,
+        requires_fp=False,
+        layer_by_layer=False,
+        n_groups=1,
+        *args,
+        **kwargs
+    ):
         super(BaseNode, self).__init__()
-        self.threshold = Parameter(torch.tensor(threshold), requires_grad=requires_thres_grad)
+        self.threshold: Parameter | torch.Tensor = Parameter(
+            torch.tensor(threshold), requires_grad=requires_thres_grad
+        )
         self.sigmoid_thres = sigmoid_thres
-        self.mem:torch.Tensor = torch.tensor(0.)
-        self.spike:torch.Tensor = torch.tensor(0.)
+        self.mem: torch.Tensor = torch.tensor(0.0)
+        self.spike: torch.Tensor = torch.tensor(0.0)
         self.dt = dt
         self.feature_map = []
         self.mem_collect = []
@@ -64,8 +67,10 @@ class BaseNode(nn.Module, abc.ABC):
         self.step = step
         self.layer_by_layer = layer_by_layer
         self.groups = n_groups
-        self.mem_detach = kwargs['mem_detach'] if 'mem_detach' in kwargs else False
-        self.requires_mem = kwargs['requires_mem'] if 'requires_mem' in kwargs else False
+        self.mem_detach = kwargs["mem_detach"] if "mem_detach" in kwargs else False
+        self.requires_mem = (
+            kwargs["requires_mem"] if "requires_mem" in kwargs else False
+        )
 
     @abc.abstractmethod
     def calc_spike(self):
@@ -92,20 +97,19 @@ class BaseNode(nn.Module, abc.ABC):
     def rearrange2node(self, inputs):
         if self.groups != 1:
             if len(inputs.shape) == 4:
-                outputs = rearrange(inputs, 'b (c t) w h -> t b c w h', t=self.step)
+                outputs = rearrange(inputs, "b (c t) w h -> t b c w h", t=self.step)
             elif len(inputs.shape) == 2:
-                outputs = rearrange(inputs, 'b (c t) -> t b c', t=self.step)
+                outputs = rearrange(inputs, "b (c t) -> t b c", t=self.step)
             else:
                 raise NotImplementedError
 
         elif self.layer_by_layer:
             if len(inputs.shape) == 4:
-                outputs = rearrange(inputs, '(t b) c w h -> t b c w h', t=self.step)
+                outputs = rearrange(inputs, "(t b) c w h -> t b c w h", t=self.step)
             elif len(inputs.shape) == 2:
-                outputs = rearrange(inputs, '(t b) c -> t b c', t=self.step)
+                outputs = rearrange(inputs, "(t b) c -> t b c", t=self.step)
             else:
                 raise NotImplementedError
-
 
         else:
             outputs = inputs
@@ -115,16 +119,16 @@ class BaseNode(nn.Module, abc.ABC):
     def rearrange2op(self, inputs):
         if self.groups != 1:
             if len(inputs.shape) == 5:
-                outputs = rearrange(inputs, 't b c w h -> b (c t) w h')
+                outputs = rearrange(inputs, "t b c w h -> b (c t) w h")
             elif len(inputs.shape) == 3:
-                outputs = rearrange(inputs, ' t b c -> b (c t)')
+                outputs = rearrange(inputs, " t b c -> b (c t)")
             else:
                 raise NotImplementedError
         elif self.layer_by_layer:
             if len(inputs.shape) == 5:
-                outputs = rearrange(inputs, 't b c w h -> (t b) c w h')
+                outputs = rearrange(inputs, "t b c w h -> (t b) c w h")
             elif len(inputs.shape) == 3:
-                outputs = rearrange(inputs, ' t b c -> (t b) c')
+                outputs = rearrange(inputs, " t b c -> (t b) c")
             else:
                 raise NotImplementedError
 
@@ -146,14 +150,13 @@ class BaseNode(nn.Module, abc.ABC):
 
             outputs = []
             for i in range(self.step):
-                
-                if self.mem_detach and hasattr(self.mem, 'detach'):
+                if self.mem_detach and hasattr(self.mem, "detach"):
                     self.mem = self.mem.detach()
                     self.spike = self.spike.detach()
                 self.integral(inputs[i])
-                
+
                 self.calc_spike()
-                
+
                 if self.requires_fp is True:
                     self.feature_map.append(self.spike)
                 if self.requires_mem is True:
@@ -164,7 +167,7 @@ class BaseNode(nn.Module, abc.ABC):
             outputs = self.rearrange2op(outputs)
             return outputs
         else:
-            if self.mem_detach and hasattr(self.mem, 'detach'):
+            if self.mem_detach and hasattr(self.mem, "detach"):
                 self.mem = self.mem.detach()
                 self.spike = self.spike.detach()
             self.integral(inputs)
@@ -172,7 +175,7 @@ class BaseNode(nn.Module, abc.ABC):
             if self.requires_fp is True:
                 self.feature_map.append(self.spike)
             if self.requires_mem is True:
-                self.mem_collect.append(self.mem)   
+                self.mem_collect.append(self.mem)
             return self.spike
 
     def n_reset(self):
@@ -180,12 +183,12 @@ class BaseNode(nn.Module, abc.ABC):
         神经元重置，用于模型接受两个不相关输入之间，重置神经元所有的状态
         :return: None
         """
-        self.mem = torch.tensor(self.v_reset)
-        self.spike = torch.tensor(0.)
+        self.mem = torch.tensor(self.v_reset).detach()
+        self.spike = torch.tensor(0.0).detach()
         self.feature_map = []
         self.mem_collect = []
-    def get_n_attr(self, attr):
 
+    def get_n_attr(self, attr):
         if hasattr(self, attr):
             return getattr(self, attr)
         else:
@@ -205,7 +208,9 @@ class BaseNode(nn.Module, abc.ABC):
         :param thresh: 阈值
         :return:
         """
-        self.threshold = Parameter(torch.tensor(thresh, dtype=torch.float), requires_grad=False)
+        self.threshold = Parameter(
+            torch.tensor(thresh, dtype=torch.float), requires_grad=False
+        )
 
     def set_n_tau(self, tau):
         """
@@ -213,12 +218,15 @@ class BaseNode(nn.Module, abc.ABC):
         :param tau: 衰减系数
         :return:
         """
-        if hasattr(self, 'tau'):
-            self.tau = Parameter(torch.tensor(tau, dtype=torch.float), requires_grad=False)
+        if hasattr(self, "tau"):
+            self.tau = Parameter(
+                torch.tensor(tau, dtype=torch.float), requires_grad=False
+            )
         else:
             raise NotImplementedError
 
-#============================================================================
+
+# ============================================================================
 # node的基类
 class BaseMCNode(nn.Module, abc.ABC):
     """
@@ -227,10 +235,8 @@ class BaseMCNode(nn.Module, abc.ABC):
     :param v_reset: 静息电位
     :param comps: 神经元不同房室, 例如["apical", "basal", "soma"]
     """
-    def __init__(self,
-                 threshold=1.0,
-                 v_reset=0.,
-                 comps=[]):
+
+    def __init__(self, threshold=1.0, v_reset=0.0, comps=[]):
         super().__init__()
         self.threshold = Parameter(torch.tensor(threshold), requires_grad=False)
         # self.decay = Parameter(torch.tensor(decay), requires_grad=False)
@@ -238,22 +244,23 @@ class BaseMCNode(nn.Module, abc.ABC):
         assert len(comps) != 0
         self.mems = dict()
         for c in comps:
-            self.mems[c] = None 
-        self.spike:None|torch.Tensor = None
+            self.mems[c] = None
+        self.spike: None | torch.Tensor = None
         self.warm_up = False
 
     @abc.abstractmethod
     def calc_spike(self):
         pass
+
     @abc.abstractmethod
     def integral(self, inputs):
-        pass        
-    
+        pass
+
     def forward(self, inputs: dict):
-        '''
+        """
         Params:
-            inputs dict: Inputs for every compartments of neuron 
-        '''
+            inputs dict: Inputs for every compartments of neuron
+        """
         if self.warm_up:
             return inputs
         else:
@@ -264,18 +271,22 @@ class BaseMCNode(nn.Module, abc.ABC):
     def n_reset(self):
         for c in self.mems.keys():
             self.mems[c] = self.v_reset
-        self.spike = torch.tensor(0.)
+        self.spike = torch.tensor(0.0)
 
     def get_n_fire_rate(self):
         if self.spike is None:
-            return 0.
-        return float((self.spike.detach() >= self.threshold).sum()) / float(np.product(self.spike.shape))
+            return 0.0
+        return float((self.spike.detach() >= self.threshold).sum()) / float(
+            np.product(self.spike.shape)
+        )
 
     def set_n_warm_up(self, flag):
         self.warm_up = flag
 
     def set_n_threshold(self, thresh):
-        self.threshold = Parameter(torch.tensor(thresh, dtype=torch.float), requires_grad=False)
+        self.threshold = Parameter(
+            torch.tensor(thresh, dtype=torch.float), requires_grad=False
+        )
 
 
 class ThreeCompNode(BaseMCNode):
@@ -289,14 +300,17 @@ class ThreeCompNode(BaseMCNode):
     :param comps: 神经元不同房室, 例如["apical", "basal", "soma"]
     :param act_fun: 脉冲梯度代理函数
     """
-    def __init__(self,
-                 threshold=1.0,
-                 tau=2.0,
-                 tau_basal=2.0,
-                 tau_apical=2.0,
-                 v_reset=0.0,
-                 comps=['basal', 'apical', 'soma'],
-                 act_fun:Type[SurrogateFunctionBase]=AtanGrad):
+
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        tau_basal=2.0,
+        tau_apical=2.0,
+        v_reset=0.0,
+        comps=["basal", "apical", "soma"],
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+    ):
         g_B = 0.6
         g_L = 0.05
         super().__init__(threshold, v_reset, comps)
@@ -304,37 +318,38 @@ class ThreeCompNode(BaseMCNode):
         self.tau_basal = tau_basal
         self.tau_apical = tau_apical
         self.act_fun = act_fun(alpha=tau, requires_grad=False)
-    
+
     def integral(self, basal_inputs, apical_inputs):
-        '''
+        """
         Params:
-            inputs torch.Tensor: Inputs for basal dendrite  
-        '''
+            inputs torch.Tensor: Inputs for basal dendrite
+        """
 
-        self.mems['basal'] =  (self.mems['basal'] + basal_inputs) / self.tau_basal
-        self.mems['apical'] =  (self.mems['apical'] + apical_inputs) / self.tau_apical
+        self.mems["basal"] = (self.mems["basal"] + basal_inputs) / self.tau_basal
+        self.mems["apical"] = (self.mems["apical"] + apical_inputs) / self.tau_apical
 
-        self.mems['soma'] = self.mems['soma'] + (self.mems['apical'] + self.mems['basal'] - self.mems['soma']) / self.tau
-
+        self.mems["soma"] = (
+            self.mems["soma"]
+            + (self.mems["apical"] + self.mems["basal"] - self.mems["soma"]) / self.tau
+        )
 
     def calc_spike(self):
-        self.spike = self.act_fun(self.mems['soma'] - self.threshold)
-        self.mems['soma'] = self.mems['soma']  * (1. - self.spike.detach())
-        self.mems['basal'] = self.mems['basal'] * (1. - self.spike.detach())
-        self.mems['apical'] = self.mems['apical']  * (1. - self.spike.detach())
+        self.spike = self.act_fun(self.mems["soma"] - self.threshold)
+        self.mems["soma"] = self.mems["soma"] * (1.0 - self.spike.detach())
+        self.mems["basal"] = self.mems["basal"] * (1.0 - self.spike.detach())
+        self.mems["apical"] = self.mems["apical"] * (1.0 - self.spike.detach())
 
 
-#============================================================================
+# ============================================================================
 
-# 用于静态测试 使用ANN的情况 不累积电位 
+
+# 用于静态测试 使用ANN的情况 不累积电位
 class ReLUNode(BaseNode):
     """
     用于相同连接的ANN的测试
     """
 
-    def __init__(self,
-                 *args,
-                 **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(requires_fp=False, *args, **kwargs)
         self.act_fun = nn.ReLU()
 
@@ -360,9 +375,7 @@ class BiasReLUNode(BaseNode):
     用于相同连接的ANN的测试, 会在每个时刻注入恒定电流, 使得神经元更容易激发
     """
 
-    def __init__(self,
-                 *args,
-                 **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.act_fun = nn.ReLU()
 
@@ -381,9 +394,7 @@ class BinaryNode(BaseNode):
     用于相同连接的Binary-NN的测试
     """
 
-    def __init__(self,
-                 *args,
-                 **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(requires_fp=False, *args, **kwargs)
         self.act_fun = BinaryActivation()
 
@@ -397,7 +408,7 @@ class BinaryNode(BaseNode):
         if self.requires_fp is True:
             self.feature_map.append(self.spike)
         if self.requires_mem is True:
-                self.mem_collect.append(self.mem)
+            self.mem_collect.append(self.mem)
         return self.spike
 
     def calc_spike(self):
@@ -405,9 +416,7 @@ class BinaryNode(BaseNode):
 
 
 class IRNode(BaseNode):
-    def __init__(self,
-                 *args,
-                 **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(requires_fp=False, *args, **kwargs)
         self.k = torch.tensor([10]).float().cuda()
         self.t = torch.tensor([0.1]).float().cuda()
@@ -423,11 +432,12 @@ class IRNode(BaseNode):
         if self.requires_fp is True:
             self.feature_map.append(self.spike)
         if self.requires_mem is True:
-                self.mem_collect.append(self.mem)
+            self.mem_collect.append(self.mem)
         return self.spike
 
     def calc_spike(self):
         pass
+
 
 # ============================================================================
 # 用于SNN的node
@@ -448,7 +458,13 @@ class IFNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=.5, act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=0.5,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         """
         :param threshold:
         :param act_fun:
@@ -458,7 +474,7 @@ class IFNode(BaseNode):
         super().__init__(threshold, *args, **kwargs)
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
 
     def integral(self, inputs):
         self.mem = self.mem + inputs * self.dt
@@ -486,12 +502,19 @@ class LIFNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=0.5, tau=2., act_fun:Type[SurrogateFunctionBase]=QGateGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=0.5,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = QGateGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
         # self.threshold = threshold
         # print(threshold)
         # print(tau)
@@ -514,8 +537,20 @@ class BackEINode(BaseNode):
     :param args: 其他的参数
     :param kwargs: 其他的参数
     """
-    def __init__(self, threshold=0.5, decay=0.2, act_fun=BackEIGateGrad, th_fun=EIGrad, channel=40, if_back=True,
-                 if_ei=True, cfg_backei=2, *args, **kwargs):
+
+    def __init__(
+        self,
+        threshold=0.5,
+        decay=0.2,
+        act_fun=BackEIGateGrad,
+        th_fun=EIGrad,
+        channel=40,
+        if_back=True,
+        if_ei=True,
+        cfg_backei=2,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.decay = decay
         if isinstance(act_fun, str):
@@ -526,14 +561,26 @@ class BackEINode(BaseNode):
         self.th_fun = th_fun()
         self.channel = channel
         self.if_back = if_back
-        self.mem:None|torch.Tensor = None
-        self.spike:None|torch.Tensor = None
+        self.mem: None | torch.Tensor = None
+        self.spike: None | torch.Tensor = None
 
         if self.if_back:
-            self.back = nn.Conv2d(channel, channel, kernel_size=2 * cfg_backei+1, stride=1, padding=cfg_backei)
+            self.back = nn.Conv2d(
+                channel,
+                channel,
+                kernel_size=2 * cfg_backei + 1,
+                stride=1,
+                padding=cfg_backei,
+            )
         self.if_ei = if_ei
         if self.if_ei:
-            self.ei = nn.Conv2d(channel, channel, kernel_size=2 * cfg_backei+1, stride=1, padding=cfg_backei)
+            self.ei = nn.Conv2d(
+                channel,
+                channel,
+                kernel_size=2 * cfg_backei + 1,
+                stride=1,
+                padding=cfg_backei,
+            )
 
     def integral(self, inputs):
         if self.mem is None:
@@ -548,11 +595,11 @@ class BackEINode(BaseNode):
     def calc_spike(self):
         if self.if_ei:
             ei_gate = self.th_fun(self.ei(self.mem))
-            self.spike = self.act_fun(self.mem-self.threshold)
+            self.spike = self.act_fun(self.mem - self.threshold)
             self.mem = self.mem * (1 - self.spike)
             self.spike = ei_gate * self.spike
         else:
-            self.spike = self.act_fun(self.mem-self.threshold)
+            self.spike = self.act_fun(self.mem - self.threshold)
             self.mem = self.mem * (1 - self.spike)
 
     def n_reset(self):
@@ -583,14 +630,16 @@ class NoiseLIFNode(LIFNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self,
-                 threshold=1,
-                 tau=2.,
-                 act_fun:Type[SurrogateFunctionBase]=GateGrad,
-                 log_alpha=np.log(2),
-                 log_beta=np.log(6),
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        threshold=1,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = GateGrad,
+        log_alpha=np.log(2),
+        log_beta=np.log(6),
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold=threshold, tau=tau, act_fun=act_fun, *args, **kwargs)
         self.log_alpha = Parameter(torch.as_tensor(log_alpha), requires_grad=True)
         self.log_beta = Parameter(torch.as_tensor(log_beta), requires_grad=True)
@@ -608,7 +657,10 @@ class NoiseLIFNode(LIFNode):
         alpha, beta = torch.exp(self.log_alpha), torch.exp(self.log_beta)
         mu = alpha / (alpha + beta)
         var = ((alpha + 1) * alpha) / ((alpha + beta + 1) * (alpha + beta))
-        noise = torch.distributions.beta.Beta(alpha, beta).sample(inputs.shape) * self.get_thres()
+        noise = (
+            torch.distributions.beta.Beta(alpha, beta).sample(inputs.shape)
+            * self.get_thres()
+        )
         noise = noise * var / var.detach() + mu - mu.detach()
 
         self.mem = self.mem + ((inputs - self.mem) / self.tau + noise) * self.dt
@@ -634,12 +686,19 @@ class BiasLIFNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
 
     def integral(self, inputs):
         self.mem = self.mem + ((inputs - self.mem) / self.tau) * self.dt + 0.1
@@ -654,12 +713,19 @@ class LIFSTDPNode(BaseNode):
     用于执行STDP运算时使用的节点 decay的方式是膜电位乘以decay并直接加上输入电流
     """
 
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
 
     def integral(self, inputs):
         self.mem = self.mem * self.tau + inputs
@@ -692,12 +758,19 @@ class PLIFNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
-        init_w = -math.log(tau - 1.)
+        init_w = -math.log(tau - 1.0)
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=True)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=True)
         self.w = nn.Parameter(torch.as_tensor(init_w))
 
     def integral(self, inputs):
@@ -726,15 +799,17 @@ class NoisePLIFNode(PLIFNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self,
-                 threshold=1,
-                 tau=2.,
-                 act_fun:Type[SurrogateFunctionBase]=GateGrad,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        threshold=1,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = GateGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold=threshold, tau=tau, act_fun=act_fun, *args, **kwargs)
-        log_alpha = kwargs['log_alpha'] if 'log_alpha' in kwargs else np.log(2)
-        log_beta = kwargs['log_beta'] if 'log_beta' in kwargs else np.log(6)
+        log_alpha = kwargs["log_alpha"] if "log_alpha" in kwargs else np.log(2)
+        log_beta = kwargs["log_beta"] if "log_beta" in kwargs else np.log(6)
         self.log_alpha = Parameter(torch.as_tensor(log_alpha), requires_grad=True)
         self.log_beta = Parameter(torch.as_tensor(log_beta), requires_grad=True)
 
@@ -751,7 +826,10 @@ class NoisePLIFNode(PLIFNode):
         alpha, beta = torch.exp(self.log_alpha), torch.exp(self.log_beta)
         mu = alpha / (alpha + beta)
         var = ((alpha + 1) * alpha) / ((alpha + beta + 1) * (alpha + beta))
-        noise = torch.distributions.beta.Beta(alpha, beta).sample(inputs.shape) * self.get_thres()
+        noise = (
+            torch.distributions.beta.Beta(alpha, beta).sample(inputs.shape)
+            * self.get_thres()
+        )
         noise = noise * var / var.detach() + mu - mu.detach()
         self.mem = self.mem + ((inputs - self.mem) * self.w.sigmoid() + noise) * self.dt
 
@@ -774,12 +852,19 @@ class BiasPLIFNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
-        init_w = -math.log(tau - 1.)
+        init_w = -math.log(tau - 1.0)
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=True)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=True)
         self.w = nn.Parameter(torch.as_tensor(init_w))
 
     def integral(self, inputs):
@@ -808,20 +893,24 @@ class DoubleSidePLIFNode(LIFNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self,
-                 threshold=.5,
-                 tau=2.,
-                 act_fun:Type[SurrogateFunctionBase]=AtanGrad,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        threshold=0.5,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, tau, act_fun, *args, **kwargs)
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=True)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=True)
 
     def calc_spike(self):
-        self.spike = self.act_fun(self.mem - self.get_thres()) - self.act_fun(self.get_thres - self.mem)
-        self.mem = self.mem * (1. - torch.abs(self.spike.detach()))
+        self.spike = self.act_fun(self.mem - self.get_thres()) - self.act_fun(
+            self.get_thres - self.mem
+        )
+        self.mem = self.mem * (1.0 - torch.abs(self.spike.detach()))
 
 
 class IzhNode(BaseNode):
@@ -837,31 +926,40 @@ class IzhNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
-        self.a = kwargs['a'] if 'a' in kwargs else 0.02
-        self.b = kwargs['b'] if 'b' in kwargs else 0.2
-        self.c = kwargs['c'] if 'c' in kwargs else -55.
-        self.d = kwargs['d'] if 'd' in kwargs else -2.
-        '''
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
+        self.a = kwargs["a"] if "a" in kwargs else 0.02
+        self.b = kwargs["b"] if "b" in kwargs else 0.2
+        self.c = kwargs["c"] if "c" in kwargs else -55.0
+        self.d = kwargs["d"] if "d" in kwargs else -2.0
+        """
         v' = 0.04v^2 + 5v + 140 -u + I
         u' = a(bv-u)
         下面是将Izh离散化的写法
         if v>= thresh:
             v = c
             u = u + d
-        '''
+        """
         # 初始化膜电势 以及 对应的U
-        self.mem:torch.Tensor = torch.Tensor(0.)
-        self.u:torch.Tensor = torch.Tensor(0.)
-        self.dt = kwargs['dt'] if 'dt' in kwargs else 1.
+        self.mem: torch.Tensor = torch.tensor(0.0)
+        self.u: torch.Tensor = torch.tensor(0.0)
+        self.dt = kwargs["dt"] if "dt" in kwargs else 1.0
 
     def integral(self, inputs):
-        self.mem = self.mem + self.dt * (0.04 * self.mem * self.mem + 5 * self.mem - self.u + 140 + inputs)
+        self.mem = self.mem + self.dt * (
+            0.04 * self.mem * self.mem + 5 * self.mem - self.u + 140 + inputs
+        )
         self.u = self.u + self.dt * (self.a * self.b * self.mem - self.a * self.u)
 
     def calc_spike(self):
@@ -870,9 +968,9 @@ class IzhNode(BaseNode):
         self.u = self.u + self.spike.detach() * self.d
 
     def n_reset(self):
-        self.mem = torch.Tensor(0.)
-        self.u = torch.Tensor(0.)
-        self.spike = torch.Tensor(0.)
+        self.mem = torch.tensor(0.0)
+        self.u = torch.tensor(0.0)
+        self.spike = torch.tensor(0.0)
 
 
 class IzhNodeMU(BaseNode):
@@ -888,22 +986,31 @@ class IzhNodeMU(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
-        self.a = kwargs['a'] if 'a' in kwargs else 0.02
-        self.b = kwargs['b'] if 'b' in kwargs else 0.2
-        self.c = kwargs['c'] if 'c' in kwargs else -55.
-        self.d = kwargs['d'] if 'd' in kwargs else -2.
-        self.mem = kwargs['mem'] if 'mem' in kwargs else torch.Tensor(0.)
-        self.u = kwargs['u'] if 'u' in kwargs else 0.
-        self.dt = kwargs['dt'] if 'dt' in kwargs else 1.
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
+        self.a = kwargs["a"] if "a" in kwargs else 0.02
+        self.b = kwargs["b"] if "b" in kwargs else 0.2
+        self.c = kwargs["c"] if "c" in kwargs else -55.0
+        self.d = kwargs["d"] if "d" in kwargs else -2.0
+        self.mem = kwargs["mem"] if "mem" in kwargs else torch.tensor(0.0)
+        self.u = kwargs["u"] if "u" in kwargs else 0.0
+        self.dt = kwargs["dt"] if "dt" in kwargs else 1.0
 
     def integral(self, inputs):
-        self.mem = self.mem + self.dt * (0.04 * self.mem * self.mem + 5 * self.mem - self.u + 140 + inputs)
+        self.mem = self.mem + self.dt * (
+            0.04 * self.mem * self.mem + 5 * self.mem - self.u + 140 + inputs
+        )
         self.u = self.u + self.dt * (self.a * self.b * self.mem - self.a * self.u)
 
     def calc_spike(self):
@@ -912,9 +1019,9 @@ class IzhNodeMU(BaseNode):
         self.u = self.u + self.spike.detach() * self.d
 
     def n_reset(self):
-        self.mem = torch.Tensor(-70.)
-        self.u = 0.
-        self.spike = torch.Tensor(0.)
+        self.mem = torch.tensor(-70.0)
+        self.u = 0.0
+        self.spike = torch.tensor(0.0)
 
     def requires_activation(self):
         return False
@@ -927,7 +1034,7 @@ class DGLIFNode(BaseNode):
     :param tau: 神经元的膜常数, 控制膜电位衰减
     """
 
-    def __init__(self, threshold=.5, tau=2., *args, **kwargs):
+    def __init__(self, threshold=0.5, tau=2.0, *args, **kwargs):
         super().__init__(threshold, tau, *args, **kwargs)
         self.act = nn.ReLU()
         self.tau = tau
@@ -938,12 +1045,21 @@ class DGLIFNode(BaseNode):
 
     def calc_spike(self):
         spike = self.mem.clone()
-        spike[(spike < self.get_thres())] = 0.
+        spike[(spike < self.get_thres())] = 0.0
         # self.spike = spike / (self.mem.detach().clone() + 1e-12)
-        self.spike = spike - spike.detach() + \
-                     torch.where(spike.detach() > self.get_thres(), torch.ones_like(spike), torch.zeros_like(spike))
+        self.spike = (
+            spike
+            - spike.detach()
+            + torch.where(
+                spike.detach() > self.get_thres(),
+                torch.ones_like(spike),
+                torch.zeros_like(spike),
+            )
+        )
         self.spike = spike
-        self.mem = torch.where(self.mem >= self.get_thres(), torch.zeros_like(self.mem), self.mem)
+        self.mem = torch.where(
+            self.mem >= self.get_thres(), torch.zeros_like(self.mem), self.mem
+        )
 
 
 class HTDGLIFNode(IFNode):
@@ -953,18 +1069,27 @@ class HTDGLIFNode(IFNode):
     :param tau: 神经元的膜常数, 控制膜电位衰减
     """
 
-    def __init__(self, threshold=.5, tau=2., *args, **kwargs):
+    def __init__(self, threshold=0.5, tau=2.0, *args, **kwargs):
         super().__init__(threshold, *args, **kwargs)
         self.warm_up = False
 
     def calc_spike(self):
         spike = self.mem.clone()
-        spike[(spike < self.get_thres())] = 0.
+        spike[(spike < self.get_thres())] = 0.0
         # self.spike = spike / (self.mem.detach().clone() + 1e-12)
-        self.spike = spike - spike.detach() + \
-                     torch.where(spike.detach() > self.get_thres(), torch.ones_like(spike), torch.zeros_like(spike))
+        self.spike = (
+            spike
+            - spike.detach()
+            + torch.where(
+                spike.detach() > self.get_thres(),
+                torch.ones_like(spike),
+                torch.zeros_like(spike),
+            )
+        )
         self.spike = spike
-        self.mem = torch.where(self.mem >= self.get_thres(), torch.zeros_like(self.mem), self.mem)
+        self.mem = torch.where(
+            self.mem >= self.get_thres(), torch.zeros_like(self.mem), self.mem
+        )
         # self.mem[[(spike > self.get_thres())]] = self.mem[[(spike > self.get_thres())]] - self.get_thres()
 
         self.mem = (self.mem + 0.2 * self.spike - 0.2 * self.spike.detach()) * self.dt
@@ -989,32 +1114,51 @@ class SimHHNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, threshold=50., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=50.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        '''
+        """
         I = Cm dV/dt + g_k*n^4*(V_m-V_k) + g_Na*m^3*h*(V_m-V_Na) + g_l*(V_m - V_L)
-        '''
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
-        self.g_Na, self.g_K, self.g_l = torch.tensor(120.), torch.tensor(120), torch.tensor(0.3)  # k 36
-        self.V_Na, self.V_K, self.V_l = torch.tensor(120.), torch.tensor(-120.), torch.tensor(10.6)  # k -12
+        """
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
+        self.g_Na, self.g_K, self.g_l = (
+            torch.tensor(120.0),
+            torch.tensor(120),
+            torch.tensor(0.3),
+        )  # k 36
+        self.V_Na, self.V_K, self.V_l = (
+            torch.tensor(120.0),
+            torch.tensor(-120.0),
+            torch.tensor(10.6),
+        )  # k -12
         self.m, self.n, self.h = torch.tensor(0), torch.tensor(0), torch.tensor(0)
-        self.mem = torch.Tensor(0.)
+        self.mem = torch.tensor(0.0)
         self.dt = 0.01
 
     def integral(self, inputs):
         self.I_Na = torch.pow(self.m, 3) * self.g_Na * self.h * (self.mem - self.V_Na)
         self.I_K = torch.pow(self.n, 4) * self.g_K * (self.mem - self.V_K)
         self.I_L = self.g_l * (self.mem - self.V_l)
-        self.mem = self.mem + self.dt * (inputs - self.I_Na - self.I_K - self.I_L) / 0.02
+        self.mem = (
+            self.mem + self.dt * (inputs - self.I_Na - self.I_K - self.I_L) / 0.02
+        )
         # non Na
         # self.mem = self.mem + 0.01 * (inputs -  self.I_K - self.I_L) / 0.02  #decayed
         # NON k
         # self.mem = self.mem + 0.01 * (inputs - self.I_Na - self.I_L) / 0.02  #increase
 
-        self.alpha_n = 0.01 * (self.mem + 10.0) / (1 - torch.exp(-(self.mem + 10.0) / 10))
+        self.alpha_n = (
+            0.01 * (self.mem + 10.0) / (1 - torch.exp(-(self.mem + 10.0) / 10))
+        )
         self.beta_n = 0.125 * torch.exp(-(self.mem) / 80)
 
         self.alpha_m = 0.1 * (self.mem + 25) / (1 - torch.exp(-(self.mem + 25) / 10))
@@ -1037,8 +1181,8 @@ class SimHHNode(BaseNode):
         return self.spike
 
     def n_reset(self):
-        self.mem = torch.Tensor(0.)
-        self.spike = torch.Tensor(0.)
+        self.mem = torch.tensor(0.0)
+        self.spike = torch.tensor(0.0)
         self.m, self.n, self.h = torch.tensor(0), torch.tensor(0), torch.tensor(0)
 
     def requires_activation(self):
@@ -1046,44 +1190,58 @@ class SimHHNode(BaseNode):
 
 
 class CTIzhNode(IzhNode):
-    def __init__(self, threshold=1., tau=2., act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=1.0,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, tau, act_fun, *args, **kwargs)
 
-        self.name = kwargs['name'] if 'name' in kwargs else ''
-        self.excitability = kwargs['excitability'] if 'excitability' in kwargs else 'TRUE'
-        self.spikepattern = kwargs['spikepattern'] if 'spikepattern' in kwargs else 'RS'
-        self.synnum = kwargs['synnum'] if 'synnum' in kwargs else 0
-        self.locationlayer = kwargs['locationlayer'] if 'locationlayer' in kwargs else ''
+        self.name = kwargs["name"] if "name" in kwargs else ""
+        self.excitability = (
+            kwargs["excitability"] if "excitability" in kwargs else "TRUE"
+        )
+        self.spikepattern = kwargs["spikepattern"] if "spikepattern" in kwargs else "RS"
+        self.synnum = kwargs["synnum"] if "synnum" in kwargs else 0
+        self.locationlayer = (
+            kwargs["locationlayer"] if "locationlayer" in kwargs else ""
+        )
         self.adjneuronlist = {}
         self.proximal_dendrites = []
         self.distal_dendrites = []
-        self.totalindex = kwargs['totalindex'] if 'totalindex' in kwargs else 0
+        self.totalindex = kwargs["totalindex"] if "totalindex" in kwargs else 0
         self.colindex = 0
-        self.state = 'inactive'
+        self.state = "inactive"
 
-        self.Gup = kwargs['Gup'] if 'Gup' in kwargs else 0.0
-        self.Gdown = kwargs['Gdown'] if 'Gdown' in kwargs else 0.0
-        self.Vr = kwargs['Vr'] if 'Vr' in kwargs else 0.0
-        self.Vt = kwargs['Vt'] if 'Vt' in kwargs else 0.0
-        self.Vpeak = kwargs['Vpeak'] if 'Vpeak' in kwargs else 0.0
-        self.capicitance = kwargs['capacitance'] if 'capacitance' in kwargs else 0.0
-        self.k = kwargs['k'] if 'k' in kwargs else 0.0
-        self.mem = torch.Tensor(-65.)
+        self.Gup = kwargs["Gup"] if "Gup" in kwargs else 0.0
+        self.Gdown = kwargs["Gdown"] if "Gdown" in kwargs else 0.0
+        self.Vr = kwargs["Vr"] if "Vr" in kwargs else 0.0
+        self.Vt = kwargs["Vt"] if "Vt" in kwargs else 0.0
+        self.Vpeak = kwargs["Vpeak"] if "Vpeak" in kwargs else 0.0
+        self.capicitance = kwargs["capacitance"] if "capacitance" in kwargs else 0.0
+        self.k = kwargs["k"] if "k" in kwargs else 0.0
+        self.mem = torch.tensor(-65.0)
         self.vtmp = -65
-        self.u = torch.Tensor(-13.0)
-        self.spike = torch.Tensor(0.)
+        self.u = torch.tensor(-13.0)
+        self.spike = torch.tensor(0.0)
         self.dc = 0
 
     def integral(self, inputs):
-        self.mem += self.dt * (
-                self.k * (self.mem - self.Vr) * (self.mem - self.Vt) - self.u + inputs) / self.capicitance
+        self.mem += (
+            self.dt
+            * (self.k * (self.mem - self.Vr) * (self.mem - self.Vt) - self.u + inputs)
+            / self.capicitance
+        )
         self.u += self.dt * (self.a * (self.b * (self.mem - self.Vr) - self.u))
 
     def calc_spike(self):
         if self.mem >= self.Vpeak:
-            self.mem = torch.Tensor(self.c)
+            self.mem = torch.tensor(self.c)
             self.u = self.u + self.d
-            self.spike = torch.Tensor(1.)
+            self.spike = torch.tensor(1.0)
             self.spreadMarkPostNeurons()
 
     def spreadMarkPostNeurons(self):
@@ -1096,21 +1254,23 @@ class CTIzhNode(IzhNode):
 
 class adth(BaseNode):
     """
-        The adaptive Exponential Integrate-and-Fire model (aEIF)
-        :param args: Other parameters
-        :param kwargs: Other parameters
+    The adaptive Exponential Integrate-and-Fire model (aEIF)
+    :param args: Other parameters
+    :param kwargs: Other parameters
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(requires_fp=False, *args, **kwargs)
 
-    def adthNode(self, v, dt, c_m, g_m, alpha_w, ad, Ieff, Ichem, Igap, tau_ad, beta_ad, vt, vm1):
+    def adthNode(
+        self, v, dt, c_m, g_m, alpha_w, ad, Ieff, Ichem, Igap, tau_ad, beta_ad, vt, vm1
+    ):
         """
-                Calculate the neurons that discharge after the current threshold is reached
-                :param v: Current neuron voltage
-                :param dt: time step
-                :param ad:Adaptive variable
-                :param vv:Spike, if the voltage exceeds the threshold from below
+        Calculate the neurons that discharge after the current threshold is reached
+        :param v: Current neuron voltage
+        :param dt: time step
+        :param ad:Adaptive variable
+        :param vv:Spike, if the voltage exceeds the threshold from below
         """
         v = v + dt / c_m * (-g_m * v + alpha_w * ad + Ieff + Ichem + Igap)
         ad = ad + dt / tau_ad * (-ad + beta_ad * v)
@@ -1120,8 +1280,8 @@ class adth(BaseNode):
 
     def calc_spike(self):
         pass
-    
-    
+
+
 class HHNode(BaseNode):
     """
     用于脑模拟的HH模型
@@ -1135,16 +1295,25 @@ class HHNode(BaseNode):
     :param kwargs: 其他的参数
     """
 
-    def __init__(self, p, neuron_num, W, type_index, act_fun:Type[SurrogateFunctionBase]=AtanGrad, *args, **kwargs):
+    def __init__(
+        self,
+        p,
+        neuron_num,
+        W,
+        type_index,
+        act_fun: Type[SurrogateFunctionBase] = AtanGrad,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold=p[7], *args, **kwargs)
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        '''
+        """
         I = Cm dV/dt + g_k*n^4*(V_m-V_k) + g_Na*m^3*h*(V_m-V_Na) + g_l*(V_m - V_L)
-        '''
+        """
         self.neuron_num = neuron_num
         self.type_index = type_index
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
         self.tau_I = 1
         self.g_Na = torch.tensor(p[0])
         self.g_K = torch.tensor(p[1])
@@ -1166,7 +1335,7 @@ class HHNode(BaseNode):
         else:
             self.mu = 3
         self.sig = 12
-        self.Gama_c = 1/9
+        self.Gama_c = 1 / 9
         self.mem = self.threshold * torch.rand((1, neuron_num)).squeeze(0)
         # self.mem = torch.zeros(neuron_num)
         self.spike = torch.zeros(neuron_num)
@@ -1182,9 +1351,13 @@ class HHNode(BaseNode):
         self.I_K = torch.pow(self.n, 4) * self.g_K * (self.mem - self.V_K)
         self.I_L = self.g_l * (self.mem - self.V_l)
         # print(self.I_Na)
-        self.mem = self.mem + self.dt * (inputs - self.I_Na - self.I_K - self.I_L) / self.C
+        self.mem = (
+            self.mem + self.dt * (inputs - self.I_Na - self.I_K - self.I_L) / self.C
+        )
 
-        self.alpha_n = 0.01 * (self.mem + 10.0) / (1 - torch.exp(-(self.mem + 10.0) / 10))
+        self.alpha_n = (
+            0.01 * (self.mem + 10.0) / (1 - torch.exp(-(self.mem + 10.0) / 10))
+        )
         self.beta_n = 0.125 * torch.exp(-(self.mem) / 80)
 
         self.alpha_m = 0.1 * (self.mem + 25) / (1 - torch.exp(-(self.mem + 25) / 10))
@@ -1193,9 +1366,15 @@ class HHNode(BaseNode):
         self.alpha_h = 0.07 * torch.exp(-(self.mem) / 20)
         self.beta_h = 1 / (1 + torch.exp(-(self.mem + 30) / 10))
 
-        self.n = self.n + self.dt * (self.alpha_n * (1 - self.n) - self.beta_n * self.n) / 10
-        self.m = self.m + self.dt * (self.alpha_m * (1 - self.m) - self.beta_m * self.m) / 10
-        self.h = self.h + self.dt * (self.alpha_h * (1 - self.h) - self.beta_h * self.h) / 10
+        self.n = (
+            self.n + self.dt * (self.alpha_n * (1 - self.n) - self.beta_n * self.n) / 10
+        )
+        self.m = (
+            self.m + self.dt * (self.alpha_m * (1 - self.m) - self.beta_m * self.m) / 10
+        )
+        self.h = (
+            self.h + self.dt * (self.alpha_h * (1 - self.h) - self.beta_h * self.h) / 10
+        )
 
     def calc_spike(self):
         self.spike = (self.mem > self.threshold).float()
@@ -1208,36 +1387,35 @@ class HHNode(BaseNode):
         return self.spike, self.mem
 
     def n_reset(self):
-        self.mem = torch.Tensor(0.)
-        self.spike = torch.Tensor(0.)
+        self.mem = torch.tensor(0.0)
+        self.spike = torch.tensor(0.0)
         self.m, self.n, self.h = torch.tensor(0), torch.tensor(0), torch.tensor(0)
 
     def requires_activation(self):
         return False
 
-    
-    
+
 class aEIF(BaseNode):
     """
-        The adaptive Exponential Integrate-and-Fire model (aEIF)
-        This class define the membrane, spike, current and parameters of a neuron group of a specific type
-        :param args: Other parameters
-        :param kwargs: Other parameters
+    The adaptive Exponential Integrate-and-Fire model (aEIF)
+    This class define the membrane, spike, current and parameters of a neuron group of a specific type
+    :param args: Other parameters
+    :param kwargs: Other parameters
     """
 
     def __init__(self, p, neuron_num, W, type_index, *args, **kwargs):
         """
-            p:[threshold, c_m, alpha_w, beta_ad, mu, sig, if_IN]
-            c_m: Membrane capacitance
-            alpha_w: Coupling of the adaptation variable
-            beta_ad: Conductance of the adaptation variable
-            mu: Mean of back current
-            sig: Variance of back current
-            if_IN: if the neuron type is inhibitory neuron, it has gap-junction
+        p:[threshold, c_m, alpha_w, beta_ad, mu, sig, if_IN]
+        c_m: Membrane capacitance
+        alpha_w: Coupling of the adaptation variable
+        beta_ad: Conductance of the adaptation variable
+        mu: Mean of back current
+        sig: Variance of back current
+        if_IN: if the neuron type is inhibitory neuron, it has gap-junction
 
-            neuron_num: number of neurons in this group
-            W: connection weight for the neuron groups connected to this group
-            type_index: the index of this type of neuron group in the brain region
+        neuron_num: number of neurons in this group
+        W: connection weight for the neuron groups connected to this group
+        type_index: the index of this type of neuron group in the brain region
         """
         super().__init__(threshold=p[0], requires_fp=False, *args, **kwargs)
         self.neuron_num = neuron_num
@@ -1254,9 +1432,13 @@ class aEIF(BaseNode):
         self.beta_ad = p[3]
         if self.if_IN:
             self.c_m = p[1] * (self.g_m + self.Gama_c)  # neuron membrane time constant
-            self.alpha_w = p[2] * (self.g_m + self.Gama_c)  # effective adaption coupling
+            self.alpha_w = p[2] * (
+                self.g_m + self.Gama_c
+            )  # effective adaption coupling
             self.mu = p[4] * (self.g_m + self.Gama_c)
-            self.sig = p[5] * (self.g_m + self.Gama_c)  # effective mean and variance of back current
+            self.sig = p[5] * (
+                self.g_m + self.Gama_c
+            )  # effective mean and variance of back current
         else:
             self.c_m = p[1] * self.g_m
             self.alpha_w = p[2] * self.g_m
@@ -1269,7 +1451,9 @@ class aEIF(BaseNode):
         self.mem = self.v_reset * torch.ones(neuron_num)
         self.spike = torch.zeros(neuron_num)
         self.ad = torch.zeros(neuron_num)
-        self.ref = torch.randint(0, int(self.refrac + 1), (1, neuron_num)).squeeze(0)  # refractory counter
+        self.ref = torch.randint(0, int(self.refrac + 1), (1, neuron_num)).squeeze(
+            0
+        )  # refractory counter
         self.Iback = torch.zeros(neuron_num)
         self.Ieff = torch.zeros(neuron_num)
         self.Ichem = torch.zeros(neuron_num)
@@ -1277,14 +1461,18 @@ class aEIF(BaseNode):
             self.Igap = torch.zeros(neuron_num)
 
     def integral(self, inputs):
+        self.mem = self.mem + (self.ref > self.refrac) * self.dt / self.c_m * (
+            -self.g_m * (self.mem - self.v_reset)
+            + self.g_m
+            * self.Delta_T
+            * torch.exp((self.mem - self.threshold) / self.Delta_T)
+            + self.alpha_w * self.ad
+            + inputs
+        )
 
-        self.mem = self.mem + (self.ref > self.refrac) * self.dt / self.c_m * \
-                   (-self.g_m * (self.mem - self.v_reset) + self.g_m * self.Delta_T *
-                    torch.exp((self.mem - self.threshold) / self.Delta_T) +
-                    self.alpha_w * self.ad + inputs)
-
-        self.ad = self.ad + (self.ref > self.refrac) * self.dt / self.tau_ad * \
-                  (-self.ad + self.beta_ad * (self.mem - self.v_reset))
+        self.ad = self.ad + (self.ref > self.refrac) * self.dt / self.tau_ad * (
+            -self.ad + self.beta_ad * (self.mem - self.v_reset)
+        )
 
     def calc_spike(self):
         self.spike = (self.mem > self.threshold).float()
@@ -1296,7 +1484,8 @@ class aEIF(BaseNode):
         self.integral(inputs)
         self.calc_spike()
         return self.spike, self.mem
-    
+
+
 class LIAFNode(BaseNode):
     """
     Leaky Integrate and Analog Fire (LIAF), Reference: https://ieeexplore.ieee.org/abstract/document/9429228
@@ -1305,7 +1494,17 @@ class LIAFNode(BaseNode):
     :param threshold_related: 阈值依赖模式，若为"True"则 self.spike = act_fun(mem-threshold)
     :note that BaseNode return self.spike, and here self.spike is analog value.
     """
-    def __init__(self, spike_act:SurrogateFunctionBase=BackEIGateGrad(), act_fun="SELU", threshold=0.5, tau=2., threshold_related=True, *args, **kwargs):
+
+    def __init__(
+        self,
+        spike_act: SurrogateFunctionBase = BackEIGateGrad(),
+        act_fun="SELU",
+        threshold=0.5,
+        tau=2.0,
+        threshold_related=True,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         if isinstance(act_fun, str):
             act_fun = eval("nn." + act_fun + "()")
@@ -1327,7 +1526,6 @@ class LIAFNode(BaseNode):
         self.spike = spike_tmp
 
 
-
 class OnlineLIFNode(BaseNode):
     """
     Online-update Leaky Integrate and Fire
@@ -1339,15 +1537,22 @@ class OnlineLIFNode(BaseNode):
     若需保留时序，需要对self.rate_tracking进行计算。实现可参考https://github.com/pkuxmq/OTTT-SNN
     """
 
-    def __init__(self, threshold=0.5, tau=2., act_fun:Type[SurrogateFunctionBase]=QGateGrad, init=False, *args, **kwargs):
+    def __init__(
+        self,
+        threshold=0.5,
+        tau=2.0,
+        act_fun: Type[SurrogateFunctionBase] = QGateGrad,
+        init=False,
+        *args,
+        **kwargs
+    ):
         super().__init__(threshold, *args, **kwargs)
         self.tau = tau
         if isinstance(act_fun, str):
             act_fun = eval(act_fun)
-        self.act_fun = act_fun(alpha=2., requires_grad=False)
+        self.act_fun = act_fun(alpha=2.0, requires_grad=False)
         self.rate_tracking = None
         self.init = True
-
 
     def integral(self, inputs):
         if self.init is True:
